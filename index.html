@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ダメージ計算機 完全版</title>
+<style>
+body{font-family:sans-serif;margin:10px;background:#f4f4f4}
+.wrap{display:flex;gap:10px;flex-wrap:wrap}
+.box{background:#fff;padding:10px;border-radius:8px;flex:1;min-width:320px}
+.row{display:flex;justify-content:space-between;margin:4px 0}
+input[type=number]{width:120px}
+button{padding:8px;margin:4px}
+#result{white-space:pre-line;background:#fff;padding:10px;border-radius:8px;margin-top:10px}
+</style>
+</head>
+<body>
+<h2>ダメージ計算機</h2>
+
+<div class="wrap">
+<div class="box">
+<h3>攻撃関係</h3>
+<div class="row"><span>基礎攻撃力</span><input id="base" type="number" value="1500"></div>
+<div class="row"><span>ステータス攻撃力</span><input id="satk" type="number" value="5000"></div>
+<div class="row"><span>クリダメ</span><input id="critdmg" type="number" value="200"></div>
+<div class="row"><span>与ダメージ</span><input id="dmg" type="number" value="0"></div>
+<div class="row"><span>攻撃力バフ</span><input id="atkbuff" type="number" value="31"></div>
+<div class="row"><span>スキル倍率</span><input id="skill" type="number" value="100"></div>
+<div class="row"><span>陣形ボーナス</span><input id="form" type="number" value="42"></div>
+<div class="row"><span>ペット攻撃力</span><input id="pet" type="number" value="564"></div>
+<div class="row"><span>ペット潜在能力</span><input id="pot" type="number" value="72"></div>
+<div class="row"><span>クリ率</span><input id="critrate" type="number" value="100"></div>
+<div class="row"><span>フェイタル率</span><input id="fatalrate" type="number" value="100"></div>
+<div class="row"><span>フェイタル倍率</span><input id="fatalmult" type="number" value="65"></div>
+</div>
+
+<div class="box">
+<h3>防御関係</h3>
+<div class="row"><span>ステータス防御力</span><input id="def" type="number" value="2000"></div>
+<div class="row"><span>防御アップ</span><input id="defup" type="number" value="0"></div>
+<div class="row"><span>防御ダウン</span><input id="defdown" type="number" value="24"></div>
+<div class="row"><span>防御無視</span><input id="ignore" type="number" value="0"></div>
+<div class="row"><span>被ダメージ増加</span><input id="taken" type="number" value="0"></div>
+<hr>
+<label><input type="checkbox" id="linaDmg">リナ与ダメ(+28%)</label><br>
+<label><input type="checkbox" id="linaCrit">リナクリダメ(+34%)</label><br>
+<label><input type="checkbox" id="biscuit">ビスケット与ダメ(+40%)</label><br><br>
+
+<label><input type="checkbox" id="showNormal">通常ダメージ表示</label><br>
+<label><input type="checkbox" id="showFatal">フェイタルダメージ表示</label>
+</div>
+</div>
+
+<div class="box">
+<h3>スロット</h3>
+<input id="slotName" placeholder="スロット名">
+<button onclick="saveSlot()">保存</button>
+<button onclick="deleteSlot()">削除</button>
+<select id="slotList" onchange="loadSlot()"></select>
+</div>
+
+<button onclick="calc()">計算</button>
+<button onclick="copyResult()">コピー</button>
+
+<div id="result"></div>
+
+<script>
+showNormal.checked=false;
+showFatal.checked=false;
+
+function val(id){return parseFloat(document.getElementById(id).value)||0;}
+
+function calc(){
+ let crit=val("critdmg")/100;
+ let dmg=val("dmg");
+
+ if(linaDmg.checked)dmg+=28;
+ if(biscuit.checked)dmg+=40;
+ if(linaCrit.checked)crit+=0.34;
+
+ let finalAtk=(val("satk")+val("pet")+val("base")*(val("form")/100)+val("base")*(val("pot")/100))*(1+val("atkbuff")/100);
+
+ let finalDef=1+val("def")*(1+val("defup")/100-val("defdown")/100)*(1-val("ignore")/100)*0.00214;
+
+ let skill=val("skill")/100;
+ let taken=1+val("taken")/100;
+
+ let normal=finalAtk/finalDef*skill*(1+dmg/100)*taken;
+ let critD=finalAtk/finalDef*crit*skill*(1+dmg/100)*taken;
+ let fatal=finalAtk/finalDef*(1+val("fatalmult")/100)*skill*(1+dmg/100)*taken;
+ let critFatal=finalAtk/finalDef*crit*(1+val("fatalmult")/100)*skill*(1+dmg/100)*taken;
+
+ let cr=val("critrate")/100;
+ let fr=val("fatalrate")/100;
+
+ let expected=normal*(1-cr)*(1-fr)+critD*cr*(1-fr)+fatal*fr*(1-cr)+critFatal*cr*fr;
+
+ let out=[];
+ if(showNormal.checked)out.push("通常ダメージ: "+Math.round(normal));
+ if(showFatal.checked)out.push("フェイタルダメージ: "+Math.round(fatal));
+ out.push("クリティカルダメージ: "+Math.round(critD));
+ out.push("クリ+フェイタルダメージ: "+Math.round(critFatal));
+ out.push("期待ダメージ: "+Math.round(expected));
+
+ result.innerText=out.join("\n");
+}
+
+function copyResult(){navigator.clipboard.writeText(result.innerText);}
+
+function saveSlot(){
+ let n=slotName.value.trim();
+ if(!n)return;
+ let data={};
+ document.querySelectorAll("input").forEach(i=>{
+   data[i.id]=(i.type=="checkbox")?i.checked:i.value;
+ });
+ let slots=JSON.parse(localStorage.getItem("damageSlots")||"{}");
+ slots[n]=data;
+ localStorage.setItem("damageSlots",JSON.stringify(slots));
+ refreshSlots();
+}
+
+function loadSlot(){
+ let slots=JSON.parse(localStorage.getItem("damageSlots")||"{}");
+ let d=slots[slotList.value];
+ if(!d)return;
+ Object.keys(d).forEach(k=>{
+   let e=document.getElementById(k);
+   if(!e)return;
+   if(e.type=="checkbox")e.checked=d[k];
+   else e.value=d[k];
+ });
+}
+
+function deleteSlot(){
+ let slots=JSON.parse(localStorage.getItem("damageSlots")||"{}");
+ delete slots[slotList.value];
+ localStorage.setItem("damageSlots",JSON.stringify(slots));
+ refreshSlots();
+}
+
+function refreshSlots(){
+ let slots=JSON.parse(localStorage.getItem("damageSlots")||"{}");
+ slotList.innerHTML="";
+ Object.keys(slots).forEach(k=>{
+  let o=document.createElement("option");
+  o.text=o.value=k;
+  slotList.add(o);
+ });
+}
+refreshSlots();
+</script>
+</body>
+</html>
